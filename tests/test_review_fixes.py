@@ -125,7 +125,10 @@ def test_h5_wrap_dataloader_precedence(tmp_path):
     conn.close()
     # All four steps see the ~50 ms Loader delay.
     for w in waits:
-        assert w is not None and 0.030 <= w <= 0.150, waits
+        # Generous upper bound (500 ms) — CI runners under load hit
+        # ~170 ms for a nominal 50 ms sleep. Lower bound still catches
+        # "wait not measured".
+        assert w is not None and 0.030 <= w <= 0.500, waits
 
 
 # ── H6 ─ Optimizer subclasses constructed after profile.start ────────

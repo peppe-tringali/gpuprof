@@ -42,9 +42,13 @@ def test_wrap_dataloader_captures_wait_into_step(tmp_path):
 
     # Every batch fetch cost 50 ms — the wrapper attributes each wait
     # to the step that follows, so we expect ~50 ms on every step.
+    # Upper bound is deliberately generous (500 ms, 10× nominal) so
+    # shared CI runners with time.sleep drift don't flake this. The
+    # lower bound is what really matters: it proves the wrapper isn't
+    # silently returning 0.
     assert len(waits) == 6
     for w in waits:
-        assert w is not None and 0.030 <= w <= 0.150, w
+        assert w is not None and 0.030 <= w <= 0.500, w
 
 
 def test_wrap_dataloader_preserves_len_and_attrs():

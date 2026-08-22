@@ -7,6 +7,9 @@ __pycache__/
 build/
 dist/
 .eggs/
+# Twine / PyPI credentials that some users might drop in the repo
+# by mistake. Never commit tokens.
+.pypirc
 
 # ── Virtual environments ────────────────────────────────────────────────
 .venv/

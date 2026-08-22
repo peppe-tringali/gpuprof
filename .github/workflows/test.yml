@@ -8,7 +8,6 @@ on:
 jobs:
   test:
     strategy:
-      # Run every combo; don't stop the whole matrix on a single failure.
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
@@ -24,35 +23,59 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: pip
 
+      - name: Show environment
+        # Print what actually landed so a failure log tells us the
+        # runner's Python build, installed dep versions, and OS
+        # details without needing repo-admin log access.
+        run: |
+          python --version
+          python -c "import sys; print(sys.version_info); print(sys.executable)"
+          uname -a
+          which pytest || true
+
       - name: Install package + dev extras (no torch — tested separately)
         run: |
           python -m pip install --upgrade pip
           pip install -e ".[server,postgres,dev,host]"
+          pip list
 
       - name: Run unit + integration tests (mock GPU backend)
         env:
           GPUPROF_MOCK: "1"
-        run: pytest tests/ -x --tb=short
+          # Isolate any home-dir writes so the tool's default buffer
+          # path (~/.gpuprof/buffer) can't collide with the runner's
+          # pre-existing state.
+          HOME: ${{ runner.temp }}/home
+        run: |
+          mkdir -p "$HOME"
+          # -ra shows short summary of ALL non-passing outcomes
+          # (skips + failures) so we see what got skipped and why.
+          pytest tests/ -ra --tb=short -v
+
+      - name: Upload debug artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-logs-${{ matrix.os }}-py${{ matrix.python-version }}
+          path: |
+            .pytest_cache/
+            /tmp/gpuprof*.log
+          if-no-files-found: ignore
 
   test-torch:
-    # A second job that exercises the auto-instrumentation code paths
-    # (torch is heavy; skip on the matrix above).
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: pip
-
       - name: Install with torch (CPU wheel)
         run: |
           python -m pip install --upgrade pip
           pip install -e ".[server,dev,host]"
           pip install --index-url https://download.pytorch.org/whl/cpu torch
-
       - name: Run torch-dependent tests
         env:
           GPUPROF_MOCK: "1"
-        run: pytest tests/ -x --tb=short
+        run: pytest tests/ -ra --tb=short

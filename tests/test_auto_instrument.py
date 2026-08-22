@@ -78,7 +78,11 @@ def test_auto_captures_dataloader_wait_between_steps(tmp_path):
     # Step 0 has no prior step → no wait. Steps 1..3 should see ~50 ms.
     assert waits[0] is None or waits[0] < 0.020, waits
     for w in waits[1:]:
-        assert w is not None and 0.030 <= w <= 0.150, waits
+        # Generous upper bound so shared CI runners with time.sleep
+        # drift don't flake — the intent is "wait was ≈50 ms", not
+        # an exact clock match. 500 ms still catches "0" and "whole
+        # loop time" regressions.
+        assert w is not None and 0.030 <= w <= 0.500, waits
 
 
 def test_gradient_accumulation_accumulates_into_one_step(tmp_path):

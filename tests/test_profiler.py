@@ -27,13 +27,15 @@ def test_end_to_end_captures_phases_and_inter_step_gap(tmp_path):
     assert len(rows) == 10
     # Step 0 has no prior step, so inter_step_gap is NULL.
     assert rows[0][1] is None
-    # Subsequent steps should show ~30 ms gap (allow slack for perf_counter drift).
+    # Subsequent steps should show ~30 ms gap. Upper bound is
+    # generous (300 ms) so shared CI runners with time.sleep drift
+    # don't flake — lower bounds still catch "not measured".
     for _, gap, _, _ in rows[1:]:
-        assert gap is not None and 0.015 <= gap <= 0.100
+        assert gap is not None and 0.015 <= gap <= 0.300, gap
     # Phase timings are populated for wall-clock mode.
     for _, _, fw, bw in rows:
-        assert fw is not None and 0.005 <= fw <= 0.100
-        assert bw is not None and 0.015 <= bw <= 0.100
+        assert fw is not None and 0.005 <= fw <= 0.300, fw
+        assert bw is not None and 0.015 <= bw <= 0.300, bw
 
 
 def test_auto_flops_from_arch(tmp_path):
