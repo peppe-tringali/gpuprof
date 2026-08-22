@@ -36,7 +36,16 @@ from .integrations import (
 )
 from .integrations.wandb import attach_wandb
 
-__version__ = "0.6.0"
+# Single source of truth for the version — pulled from installed
+# package metadata so pyproject.toml is authoritative. Editable
+# installs report the version from the installed .dist-info; a bare
+# `python -c "import gpuprof"` without a build works because setuptools
+# writes a stub .egg-info at install time.
+try:
+    from importlib.metadata import version as _pkg_version
+    __version__ = _pkg_version("gpuprof")
+except Exception:  # pragma: no cover — fallback for uninstalled trees
+    __version__ = "0.0.0+unknown"
 
 __all__ = [
     "GpuProfiler",
@@ -141,6 +150,11 @@ def profile(
 
     prof = start(run_name, **kwargs)
 
+    # If the user is inside a framework loop, the dedicated adapter
+    # gives cleaner step boundaries than the generic auto-instr.
+    # Warn once so they know they're leaving signal on the table.
+    _hint_framework_adapter(auto)
+
     if wandb:
         attach_wandb(prof)
 
@@ -165,6 +179,34 @@ def profile(
         if dashboard_url is not None:
             print(f"[gpuprof] dashboard still at {dashboard_url} "
                   "until this process exits.", flush=True)
+
+
+_FRAMEWORK_HINTED = False
+
+
+def _hint_framework_adapter(auto: bool) -> None:
+    """If the user's process has already imported Lightning / HF /
+    DeepSpeed, they're probably inside a framework loop where the
+    dedicated adapter would place step boundaries more precisely
+    than the generic Module.__call__ patch. Warn once per process."""
+    global _FRAMEWORK_HINTED
+    if _FRAMEWORK_HINTED or not auto:
+        return
+    detected = []
+    if "pytorch_lightning" in sys.modules or "lightning" in sys.modules:
+        detected.append(("Lightning", "LightningCallback"))
+    if "transformers" in sys.modules:
+        detected.append(("HuggingFace Transformers", "HFTrainerCallback"))
+    if "deepspeed" in sys.modules:
+        detected.append(("DeepSpeed", "wrap_deepspeed_engine"))
+    if not detected:
+        return
+    _FRAMEWORK_HINTED = True
+    for fw, adapter in detected:
+        print(f"[gpuprof] {fw} is imported — for cleaner phase "
+              f"attribution consider `gpuprof.{adapter}` instead "
+              "of the bare `profile()` call.",
+              file=sys.stderr, flush=True)
 
 
 def _print_run_summary(db_path: str, run_id: int) -> None:

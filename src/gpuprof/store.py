@@ -123,6 +123,12 @@ _MIGRATIONS = [
         t_end_rel REAL, kernels_json TEXT)""",
     "CREATE INDEX IF NOT EXISTS ix_trace_windows_run ON trace_windows(run_id, t_start_rel)",
     "ALTER TABLE runs ADD COLUMN rank_offset_s REAL",
+    # v0.7 — server-side multi-tenant scoping. Any pre-existing run
+    # gets project="default" and user=NULL (i.e. no scoping applied).
+    "ALTER TABLE runs ADD COLUMN project TEXT DEFAULT 'default'",
+    "ALTER TABLE runs ADD COLUMN owner_user TEXT",
+    "CREATE INDEX IF NOT EXISTS ix_runs_project ON runs(project)",
+    "CREATE INDEX IF NOT EXISTS ix_runs_owner ON runs(owner_user)",
     # host_samples added in v0.5 for CPU-bound vs I/O-bound diagnosis.
     """CREATE TABLE IF NOT EXISTS host_samples (
         run_id INTEGER NOT NULL, t REAL NOT NULL,

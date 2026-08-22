@@ -6,7 +6,7 @@
 
 Tells you *why* your GPU is slow, not just that it is.
 
-[![tests](https://img.shields.io/badge/tests-141%20passing-success)](TESTING.md)
+[![tests](https://img.shields.io/badge/tests-157%20passing-success)](TESTING.md)
 [![python](https://img.shields.io/badge/python-3.9%2B-blue)]()
 [![license](https://img.shields.io/badge/license-MIT-lightgrey)]()
 

@@ -32,13 +32,25 @@ _KINDS = (_KIND_SAMPLE, _KIND_STEP, _KIND_TRACE, _KIND_COMM,
           _KIND_WINDOW, _KIND_HOST)
 
 
+_RUN_COLS = (
+    "id, name, gpu_name, started_at, ended_at, "
+    "group_id, rank, world_size, meta_json, "
+    "COALESCE(project, 'default'), owner_user"
+)
+
+
 def _row_to_run(r) -> dict:
-    """Shape a `runs` row tuple into the dict shape the API returns."""
+    """Shape a `runs` row tuple into the dict shape the API returns.
+
+    Ordered to match `_RUN_COLS`. If you add a column to that SELECT
+    list, add the field here too."""
     return {
         "id": r[0], "name": r[1], "gpu": r[2],
         "started_at": r[3], "ended_at": r[4],
         "group_id": r[5], "rank": r[6], "world_size": r[7],
         "meta": json.loads(r[8] or "{}"),
+        "project": r[9] if len(r) > 9 else "default",
+        "owner_user": r[10] if len(r) > 10 else None,
     }
 
 
@@ -72,14 +84,17 @@ class ServerStore:
     def create_run(self, name: str, gpu_name: str, meta_json: str,
                    group_id: Optional[str] = None,
                    rank: Optional[int] = None,
-                   world_size: Optional[int] = None) -> int:
+                   world_size: Optional[int] = None,
+                   owner_user: Optional[str] = None,
+                   project: str = "default") -> int:
         conn = sqlite3.connect(self._path)
         try:
             cur = conn.execute(
                 "INSERT INTO runs(name, started_at, gpu_name, group_id, "
-                "rank, world_size, meta_json) VALUES (?,?,?,?,?,?,?)",
+                "rank, world_size, meta_json, owner_user, project) "
+                "VALUES (?,?,?,?,?,?,?,?,?)",
                 (name, time.time(), gpu_name, group_id, rank,
-                 world_size, meta_json),
+                 world_size, meta_json, owner_user, project),
             )
             conn.commit()
             return cur.lastrowid
@@ -136,8 +151,7 @@ class ServerStore:
         conn = sqlite3.connect(self._path)
         try:
             rows = conn.execute(
-                "SELECT id, name, gpu_name, started_at, ended_at, "
-                "group_id, rank, world_size, meta_json "
+                f"SELECT {_RUN_COLS} "
                 "FROM runs ORDER BY started_at DESC LIMIT 200"
             ).fetchall()
             return [_row_to_run(r) for r in rows]
@@ -161,9 +175,7 @@ class ServerStore:
         conn = sqlite3.connect(self._path)
         try:
             r = conn.execute(
-                "SELECT id, name, gpu_name, started_at, ended_at, "
-                "group_id, rank, world_size, meta_json "
-                "FROM runs WHERE id=?", (run_id,),
+                f"SELECT {_RUN_COLS} FROM runs WHERE id=?", (run_id,),
             ).fetchone()
             return _row_to_run(r) if r else None
         finally:

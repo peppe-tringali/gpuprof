@@ -86,11 +86,37 @@ class Remote:
         data = self._request("POST", "/api/runs", body)
         self._run_id = int(data["id"])
         self._buffer_path = self._buffer_dir / f"run-{self._run_id}.jsonl"
+        # Sweep orphaned buffer files from prior runs. If any exist,
+        # try to drain them into the current server so users don't
+        # need to remember `gpuprof drain` after a network flake.
+        try:
+            self._sweep_orphaned_buffers()
+        except Exception:
+            pass  # never let cleanup break the new run
         self._thread = threading.Thread(
             target=self._pump, daemon=True, name="gpuprof-remote",
         )
         self._thread.start()
         return self._run_id
+
+    def _sweep_orphaned_buffers(self) -> None:
+        """Best-effort drain of `run-*.jsonl` files left behind by
+        prior runs. Only touched here (not during the training loop)
+        so it can't add latency to the hot path."""
+        if not self._buffer_dir.exists():
+            return
+        for path in sorted(self._buffer_dir.glob("run-*.jsonl")):
+            # Skip our own file — the pump owns it now.
+            if self._buffer_path is not None and path == self._buffer_path:
+                continue
+            try:
+                # Route through the shared drain code so this is
+                # exactly consistent with `gpuprof drain`.
+                from .drain import drain_file
+                drain_file(path, self._url, self._api_key)
+            except Exception:
+                # Leave the file for the next attempt / manual drain.
+                continue
 
     def end_run(self) -> None:
         self._stop.set()

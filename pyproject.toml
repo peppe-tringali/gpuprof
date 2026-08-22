@@ -1,9 +1,35 @@
 [project]
 name = "gpuprof"
-version = "0.6.0"
+version = "0.7.0"
 description = "Live GPU profiler + insight engine for PyTorch training"
+readme = "README.md"
+license = { file = "LICENSE" }
 requires-python = ">=3.9"
+authors = [{ name = "gpuprof contributors" }]
+keywords = ["pytorch", "gpu", "profiling", "mlops", "training", "cuda", "nvml"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: System :: Monitoring",
+]
 dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/gpuprof/gpuprof"
+Repository = "https://github.com/gpuprof/gpuprof"
+Issues = "https://github.com/gpuprof/gpuprof/issues"
+Changelog = "https://github.com/gpuprof/gpuprof/blob/main/CHANGELOG.md"
 
 [project.scripts]
 gpuprof = "gpuprof.__main__:main"
@@ -22,6 +48,12 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+# Ship the single-page dashboard alongside the code so a fresh
+# `pip install gpuprof` includes the HTML that `gpuprof serve`
+# hands out. Without this the sdist has the code but not the SPA.
+[tool.setuptools.package-data]
+"gpuprof.server" = ["static/*.html", "static/*.css", "static/*.js"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

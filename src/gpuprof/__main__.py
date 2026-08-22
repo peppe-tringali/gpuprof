@@ -23,6 +23,12 @@ Commands:
                 (`gpuprof drain --server http://host:8000`)
   nsys-import   Import an `nsys export --type sqlite` file into a run
                 (`gpuprof nsys-import trace.sqlite --gpuprof-db db --run-id 5`)
+  selfcheck     Probe the environment (NVML, torch, psutil, server deps)
+                (`gpuprof selfcheck`)
+  gc            Delete old runs from a gpuprof SQLite DB
+                (`gpuprof gc --older-than 30d --keep-last 20`)
+  report        Export a self-contained HTML report for a run
+                (`gpuprof report ./gpuprof.db 1 --out=report.html`)
   version       Print installed gpuprof version
 
 Run `gpuprof <command> --help` for command-specific usage.
@@ -49,6 +55,15 @@ def main() -> None:
         _m()
     elif cmd == "nsys-import":
         from .nsys import _cli
+        _cli()
+    elif cmd == "selfcheck":
+        from .selfcheck import _cli
+        _cli()
+    elif cmd == "gc":
+        from .gc_cmd import _cli
+        _cli()
+    elif cmd == "report":
+        from .report import _cli
         _cli()
     elif cmd == "version":
         from . import __version__

@@ -102,9 +102,68 @@ def _b64u_decode(s: str) -> bytes:
     return base64.urlsafe_b64decode(s + pad)
 
 
+class ApiKeySet:
+    """Multi-tenant write-auth token registry.
+
+    Two token shapes are accepted, both via `X-API-Key`:
+
+    - **Bare secret** — an opaque token that just proves "you may
+      write". Runs pushed under it are recorded with `owner_user=None`
+      and `project="default"`. This is the backward-compatible form.
+    - **Scoped token** — `user:project:secret`. Runs land with
+      `owner_user=user` and `project=project`. Different users on
+      the same server thus share the same DB but each other's runs
+      can be filtered by project or owner in the dashboard.
+
+    Provide keys via `--api-key` (repeatable), a comma-separated
+    string, or `GPUPROF_API_KEY`. Constant-time comparison prevents
+    a timing side channel on the secret.
+    """
+
+    def __init__(self, keys: Optional[list[str]]):
+        # Store the raw strings; parse on lookup. Small N.
+        self._keys = [k.strip() for k in (keys or []) if k.strip()]
+
+    def enabled(self) -> bool:
+        return bool(self._keys)
+
+    def resolve(self, presented: Optional[str]) -> Optional[dict]:
+        """Return `{"user": str|None, "project": str}` if `presented`
+        matches any configured key, else None. When write-auth is
+        disabled, always returns the "anonymous default" identity."""
+        if not self._keys:
+            return {"user": None, "project": "default"}
+        if not presented:
+            return None
+        for k in self._keys:
+            # Constant-time; avoids leaking length via short-circuit.
+            if hmac.compare_digest(presented, k):
+                return _parse_scope(k)
+        return None
+
+
+def _parse_scope(token: str) -> dict:
+    """`user:project:secret` → {user, project}. Bare secret → default."""
+    parts = token.split(":", 2)
+    if len(parts) == 3 and parts[0] and parts[1]:
+        return {"user": parts[0], "project": parts[1]}
+    return {"user": None, "project": "default"}
+
+
 class RateLimiter:
-    """Per-key sliding window. Thread-safe. Small in-memory cost:
-    O(N_active_keys × window_hits)."""
+    """Per-key sliding window. Thread-safe.
+
+    Two safety nets against unbounded memory growth on long-running
+    servers that see many distinct IPs:
+
+    - Empty deques are evicted on the read path (so a burst of new
+      IPs doesn't leave a lingering entry per IP after the window).
+    - A hard cap on the number of live keys; when reached we evict
+      the oldest-touched keys en masse. A saturated bucket a
+      malicious client tries to plant is thus bounded in RAM.
+    """
+
+    _MAX_KEYS = 10_000
 
     def __init__(self, max_per_window: int, window_s: float):
         self._max = max_per_window
@@ -115,10 +174,36 @@ class RateLimiter:
     def allow(self, key: str) -> bool:
         now = time.time()
         with self._lock:
+            # Amortized reap on every allow — the dict is bounded to
+            # ~10k keys and each reap is O(N). At 100 logins/sec that's
+            # ~1M dict lookups/sec worst case — trivial CPU. Prevents
+            # any IP that has ever hit the endpoint from leaving a
+            # persistent entry once its window expires.
+            self._reap_locked(now)
             q = self._hits.setdefault(key, deque())
             while q and q[0] < now - self._win:
                 q.popleft()
-            if len(q) >= self._max:
-                return False
-            q.append(now)
-            return True
+            allowed = len(q) < self._max
+            if allowed:
+                q.append(now)
+            if not q:
+                self._hits.pop(key, None)
+            return allowed
+
+    def _reap_locked(self, now: float) -> None:
+        """Sweep the whole table for expired keys."""
+        cutoff = now - self._win
+        expired = [k for k, q in self._hits.items()
+                   if not q or q[-1] < cutoff]
+        for k in expired:
+            self._hits.pop(k, None)
+        # Hard cap defense: if a burst punched past the sweep, drop
+        # the oldest by inspection.
+        if len(self._hits) > self._MAX_KEYS:
+            excess = len(self._hits) - self._MAX_KEYS
+            # deque[-1] is the most recent hit; sort ascending by it
+            # and drop the tail.
+            oldest = sorted(self._hits.items(),
+                            key=lambda kv: kv[1][-1] if kv[1] else 0)[:excess]
+            for k, _ in oldest:
+                self._hits.pop(k, None)

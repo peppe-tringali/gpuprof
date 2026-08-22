@@ -107,6 +107,10 @@ ALTER TABLE host_samples ADD COLUMN IF NOT EXISTS children_cpu_percent DOUBLE PR
 ALTER TABLE host_samples ADD COLUMN IF NOT EXISTS max_child_cpu_percent DOUBLE PRECISION;
 ALTER TABLE host_samples ADD COLUMN IF NOT EXISTS n_children INTEGER;
 ALTER TABLE runs ADD COLUMN IF NOT EXISTS rank_offset_s DOUBLE PRECISION;
+ALTER TABLE runs ADD COLUMN IF NOT EXISTS project TEXT DEFAULT 'default';
+ALTER TABLE runs ADD COLUMN IF NOT EXISTS owner_user TEXT;
+CREATE INDEX IF NOT EXISTS ix_runs_project ON runs(project);
+CREATE INDEX IF NOT EXISTS ix_runs_owner ON runs(owner_user);
 """
 
 _KIND_SAMPLE = "sample"
@@ -255,14 +259,17 @@ class PostgresServerStore:
     def create_run(self, name: str, gpu_name: str, meta_json: str,
                    group_id: Optional[str] = None,
                    rank: Optional[int] = None,
-                   world_size: Optional[int] = None) -> int:
+                   world_size: Optional[int] = None,
+                   owner_user: Optional[str] = None,
+                   project: str = "default") -> int:
         with self._pool.connection() as conn, conn.cursor() as cur:
             cur.execute(
                 "INSERT INTO runs(name, started_at, gpu_name, "
-                "group_id, rank, world_size, meta_json) "
-                "VALUES (%s,%s,%s,%s,%s,%s,%s) RETURNING id",
+                "group_id, rank, world_size, meta_json, "
+                "owner_user, project) "
+                "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id",
                 (name, time.time(), gpu_name, group_id, rank,
-                 world_size, meta_json),
+                 world_size, meta_json, owner_user, project),
             )
             return cur.fetchone()[0]
 

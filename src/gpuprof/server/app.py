@@ -22,7 +22,7 @@ from fastapi import (
 from fastapi.responses import FileResponse
 
 from .auth import (
-    Auth, RateLimiter,
+    ApiKeySet, Auth, RateLimiter,
     SESSION_COOKIE as _SESSION_COOKIE,
     XSRF_COOKIE as _XSRF_COOKIE,
     SESSION_TTL_S as _SESSION_TTL_S,
@@ -52,7 +52,7 @@ def create_app(
     - `db_path_for_insights`: for the SQLite backend, path used by the
       offline insights module. When None, insights routes 501.
     """
-    api_keys = set(api_keys or [])
+    keyset = ApiKeySet(api_keys)
     auth = Auth(viewer_password)
     login_limiter = RateLimiter(max_per_window=10, window_s=60.0)
 
@@ -71,12 +71,18 @@ def create_app(
     latest: dict[int, dict] = {}
     MAX_SAMPLES, MAX_STEPS, MAX_TRACES = 600, 1000, 20
 
-    def _check_key(request: Request) -> None:
-        if not api_keys:
-            return
+    def _identity(request: Request) -> dict:
+        """Validate the write-side token and return the scope
+        `{user, project}` it was bound to. Raises 403 on a bad key."""
         got = request.headers.get("X-API-Key")
-        if not got or got not in api_keys:
+        ident = keyset.resolve(got)
+        if ident is None:
             raise HTTPException(403, "bad or missing api key")
+        return ident
+
+    def _check_key(request: Request) -> dict:
+        # Kept for readability at the call sites; returns the scope.
+        return _identity(request)
 
     async def _broadcast(run_id: int, msg: dict) -> None:
         """Send `msg` to every subscriber. Uses asyncio.gather so a
@@ -146,7 +152,7 @@ def create_app(
 
     @app.post("/api/runs")
     async def create_run(request: Request):
-        _check_key(request)
+        ident = _check_key(request)
         body = await request.json()
         run_id = store.create_run(
             name=body.get("name", "unnamed"),
@@ -155,6 +161,11 @@ def create_app(
             group_id=body.get("group_id"),
             rank=body.get("rank"),
             world_size=body.get("world_size"),
+            # Bind the run to the token's scope. The client can NOT
+            # override these via the request body — servers must
+            # trust the presented key, not free-form fields.
+            owner_user=ident.get("user"),
+            project=ident.get("project", "default"),
         )
         latest[run_id] = {
             "name": body.get("name", "unnamed"),
