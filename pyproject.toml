@@ -1,0 +1,29 @@
+[project]
+name = "gpuprof"
+version = "0.6.0"
+description = "Live GPU profiler + insight engine for PyTorch training"
+requires-python = ">=3.9"
+dependencies = []
+
+[project.scripts]
+gpuprof = "gpuprof.__main__:main"
+
+[project.optional-dependencies]
+nvidia = ["pynvml>=11.5"]
+torch = ["torch>=2.0"]
+host = ["psutil>=5.9"]
+server = ["fastapi>=0.100", "uvicorn[standard]>=0.23"]
+postgres = ["psycopg[binary]>=3.1", "psycopg-pool>=3.1"]
+dev = ["pytest>=7", "httpx>=0.25", "pytest-asyncio>=0.21", "psutil>=5.9"]
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra -q"
+asyncio_mode = "auto"

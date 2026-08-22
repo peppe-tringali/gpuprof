@@ -1,0 +1,58 @@
+# ── Python bytecode / build artifacts ───────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+build/
+dist/
+.eggs/
+
+# ── Virtual environments ────────────────────────────────────────────────
+.venv/
+.venv-*/
+venv/
+env/
+ENV/
+
+# ── Test / lint / type-check caches ─────────────────────────────────────
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+.tox/
+
+# ── Runtime data written by gpuprof itself ──────────────────────────────
+# Client-side default DB + the dashboard's shadow file next to it,
+# plus SQLite's WAL sidecars.
+*.db
+*.db-wal
+*.db-shm
+*.db.dashboard
+*.sqlite
+*.sqlite3
+# On-disk buffer for offline drain — should live under $HOME, but if
+# a user runs from repo root with GPUPROF_BUFFER_DIR set, this covers it.
+.gpuprof/
+
+# ── Local logs / temp scratch ───────────────────────────────────────────
+*.log
+*.tmp
+
+# ── IDE / editor ────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ── nsys / profiling artifacts users might drop here ────────────────────
+*.nsys-rep
+*.qdrep
+
+# ── W&B local run cache, if someone tests wandb integration in-repo ─────
+wandb/

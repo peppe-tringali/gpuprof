@@ -1,0 +1,915 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>gpuprof</title>
+<style>
+  :root {
+    --bg: #0d1017; --fg: #e6e8ee; --muted: #8590a6;
+    --card: #161b22; --border: #232a34; --hover: rgba(79,139,249,0.08);
+    --accent: #4f8bf9; --accent2: #b57edc;
+    --ok: #52c41a; --warn: #f5a623; --err: #ff4d4f;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--fg);
+              font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text",
+                           system-ui, sans-serif; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  header {
+    padding: 12px 24px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 20px; position: sticky; top: 0;
+    background: var(--bg); z-index: 10;
+  }
+  header .brand { font-weight: 600; font-size: 15px; }
+  header .brand .glyph { color: var(--accent); }
+  header .crumb { color: var(--muted); font-size: 14px; }
+  header .status { margin-left: auto; color: var(--muted); font-size: 12px; display: flex; align-items: center; gap: 14px; }
+  header .status .dot {
+    display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+    background: var(--muted); margin-right: 6px; vertical-align: middle;
+  }
+  header .status.live .dot { background: var(--ok); box-shadow: 0 0 8px var(--ok); }
+  header .logout { color: var(--muted); font-size: 12px; cursor: pointer; }
+  header .logout:hover { color: var(--fg); }
+  main { padding: 20px 24px; max-width: 1400px; margin: 0 auto; }
+  .card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px 18px; margin-bottom: 16px;
+  }
+  .card h2 {
+    margin: 0 0 12px 0; font-size: 11px; font-weight: 600;
+    color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em;
+  }
+  .card h2 .h2-right { float: right; font-weight: 400; letter-spacing: 0; text-transform: none; color: var(--muted); font-size: 12px; }
+  .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); }
+  .grid.two { grid-template-columns: repeat(auto-fit, minmax(500px, 1fr)); }
+  canvas { display: block; width: 100%; height: 200px; cursor: crosshair; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); font-size: 14px; }
+  th { color: var(--muted); font-weight: 500; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; }
+  tr.clickable { cursor: pointer; }
+  tr.clickable:hover { background: var(--hover); }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 20px; }
+  .stat .n { font-size: 26px; font-weight: 600; line-height: 1.1; }
+  .stat .u { font-size: 12px; color: var(--muted); font-weight: 400; margin-left: 3px; }
+  .stat .l { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 4px; }
+  .insight { padding: 12px 14px; border-radius: 6px; border-left: 3px solid; margin-bottom: 8px; background: rgba(255,255,255,0.02); }
+  .insight.high { border-color: var(--err); }
+  .insight.medium { border-color: var(--warn); }
+  .insight.low { border-color: var(--ok); }
+  .insight .title { font-weight: 600; margin-bottom: 4px; font-size: 14px; }
+  .insight .rec { color: var(--muted); font-size: 13px; line-height: 1.5; }
+  .pill { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; background: var(--border); color: var(--muted); }
+  .pill.live { background: rgba(82,196,26,0.15); color: var(--ok); }
+  .pill.ended { background: var(--border); }
+  .empty { color: var(--muted); font-style: italic; padding: 40px; text-align: center; }
+  .row-flex { display: flex; align-items: baseline; gap: 12px; }
+  .legend { display: flex; gap: 12px; font-size: 12px; color: var(--muted); margin-top: 6px; flex-wrap: wrap; }
+  .legend .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: middle; }
+  .k-name { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+  .bar { display: inline-block; background: var(--accent); height: 8px; border-radius: 2px; vertical-align: middle; margin-right: 6px; }
+  /* login */
+  .login-wrap { max-width: 380px; margin: 80px auto; }
+  .login-wrap input[type=password] {
+    width: 100%; padding: 10px 12px; font-size: 14px; margin: 8px 0;
+    background: var(--bg); color: var(--fg); border: 1px solid var(--border);
+    border-radius: 6px;
+  }
+  .login-wrap button {
+    width: 100%; padding: 10px; font-size: 14px; font-weight: 600;
+    background: var(--accent); color: white; border: none; border-radius: 6px;
+    cursor: pointer;
+  }
+  .login-wrap button:hover { filter: brightness(1.1); }
+  .login-err { color: var(--err); font-size: 13px; margin-top: 8px; min-height: 1em; }
+  /* controls */
+  .ctrl-row { display: flex; gap: 12px; align-items: center; font-size: 12px; color: var(--muted); margin-bottom: 12px; flex-wrap: wrap; }
+  .ctrl-row label { display: flex; gap: 6px; align-items: center; }
+  .ctrl-row select, .ctrl-row button {
+    background: var(--card); color: var(--fg); border: 1px solid var(--border);
+    border-radius: 6px; padding: 4px 8px; font-size: 12px; cursor: pointer;
+  }
+  .ctrl-row .checkbox { display: flex; gap: 4px; align-items: center; }
+  /* tooltip */
+  .tt { position: absolute; pointer-events: none; z-index: 20;
+    background: rgba(13, 16, 23, 0.95); color: var(--fg);
+    border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px;
+    font-size: 12px; font-family: ui-monospace, SFMono-Regular, monospace;
+    white-space: nowrap; box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  }
+  .tt .k { color: var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><span class="glyph">◈</span> gpuprof</div>
+  <div class="crumb"><a href="#/" id="home">runs</a> <span id="crumb-tail"></span></div>
+  <div class="status">
+    <span id="status"><span class="dot"></span><span id="status-text">idle</span></span>
+    <span class="logout" id="logout" style="display:none">sign out</span>
+  </div>
+</header>
+<main id="app"></main>
+<div id="tooltip" class="tt" style="display:none"></div>
+
+<script>
+// ================= utils =================
+const $ = (s, el = document) => el.querySelector(s);
+const el = (tag, attrs = {}, children = []) => {
+  const n = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === "class") n.className = v;
+    else if (k === "html") n.innerHTML = v;
+    else if (k === "style" && typeof v === "object") Object.assign(n.style, v);
+    else if (k.startsWith("on")) n.addEventListener(k.slice(2).toLowerCase(), v);
+    else n.setAttribute(k, v);
+  }
+  for (const c of [].concat(children)) {
+    if (c == null) continue;
+    n.appendChild(typeof c === "string" ? document.createTextNode(c) : c);
+  }
+  return n;
+};
+const fmt = {
+  ms:  v => v == null ? "—" : (v * 1000).toFixed(1) + " ms",
+  gb:  v => v == null ? "—" : (v / 1e9).toFixed(1) + " GB",
+  s:   v => v == null ? "—" : v.toFixed(1) + " s",
+  us:  v => v == null ? "—" : v >= 1000 ? (v/1000).toFixed(2) + " ms" : v.toFixed(0) + " μs",
+  ago: t => { if (!t) return "—"; const d = Date.now()/1000 - t;
+    if (d < 60) return `${d|0}s ago`;
+    if (d < 3600) return `${(d/60)|0}m ago`;
+    return `${(d/3600)|0}h ago`; },
+};
+const PALETTE = ["#4f8bf9","#b57edc","#f5a623","#52c41a","#ff6b6b","#00d4c8","#ff9500","#a5d8ff","#8ce7ff","#e2c67c"];
+
+function getCookie(name) {
+  const m = document.cookie.match(new RegExp("(?:^|; )" + name.replace(/[.$?*|{}()[\]\\/+^]/g, "\\$&") + "=([^;]*)"));
+  return m ? decodeURIComponent(m[1]) : null;
+}
+
+async function apiFetch(url, opts = {}) {
+  // Attach CSRF token on state-changing requests when the cookie is set.
+  const method = (opts.method || "GET").toUpperCase();
+  if (method !== "GET" && method !== "HEAD") {
+    const xsrf = getCookie("XSRF-TOKEN");
+    if (xsrf) {
+      opts.headers = Object.assign({}, opts.headers || {}, { "X-XSRF-TOKEN": xsrf });
+    }
+  }
+  return fetch(url, opts);
+}
+
+// ================= downsampling =================
+// LTTB: keeps visual shape, O(n).
+function lttb(data, threshold) {
+  if (data.length <= threshold) return data;
+  const sampled = [data[0]];
+  const every = (data.length - 2) / (threshold - 2);
+  let a = 0;
+  for (let i = 0; i < threshold - 2; i++) {
+    const rangeStart = Math.floor((i + 1) * every) + 1;
+    const rangeEnd = Math.floor((i + 2) * every) + 1;
+    let avgX = 0, avgY = 0, count = 0;
+    for (let j = rangeStart; j < rangeEnd && j < data.length; j++) {
+      avgX += data[j][0]; avgY += data[j][1]; count++;
+    }
+    if (count === 0) continue;
+    avgX /= count; avgY /= count;
+    const bucketStart = Math.floor(i * every) + 1;
+    const bucketEnd = Math.floor((i + 1) * every) + 1;
+    let maxArea = -1, maxIdx = bucketStart;
+    for (let j = bucketStart; j < bucketEnd && j < data.length; j++) {
+      const area = Math.abs(
+        (data[a][0] - avgX) * (data[j][1] - data[a][1]) -
+        (data[a][0] - data[j][0]) * (avgY - data[a][1])
+      ) / 2;
+      if (area > maxArea) { maxArea = area; maxIdx = j; }
+    }
+    sampled.push(data[maxIdx]);
+    a = maxIdx;
+  }
+  sampled.push(data[data.length - 1]);
+  return sampled;
+}
+
+// ================= chart engine =================
+// Shared crosshair: any chart broadcasts its hovered X; other charts on
+// the page respond by re-rendering with a vertical line at that X.
+const chartRegistry = new Map();  // canvas -> lastDrawArgs
+let crosshairX = null;
+
+function registerChart(canvas, drawFn) {
+  chartRegistry.set(canvas, drawFn);
+}
+
+function broadcastCrosshair(x) {
+  crosshairX = x;
+  for (const [canvas, drawFn] of chartRegistry) drawFn();
+}
+
+function drawLine(canvas, series, opts = {}) {
+  const draw = () => _drawLine(canvas, series, opts);
+  registerChart(canvas, draw);
+  draw();
+  attachInteraction(canvas, series, opts, "line");
+}
+
+function _drawLine(canvas, series, opts) {
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * dpr; canvas.height = rect.height * dpr;
+  const ctx = canvas.getContext("2d"); ctx.scale(dpr, dpr);
+  const W = rect.width, H = rect.height;
+  const pad = { l: 48, r: 12, t: 8, b: 22 };
+  const iw = W - pad.l - pad.r, ih = H - pad.t - pad.b;
+  const flat = series.flatMap(s => s.points);
+  if (!flat.length) {
+    ctx.fillStyle = "#8590a6"; ctx.font = "12px system-ui";
+    ctx.fillText("no data yet", pad.l, H / 2); return;
+  }
+  const xs = flat.map(p => p[0]), ys = flat.map(p => p[1]);
+  const xmin = Math.min(...xs), xmax = Math.max(...xs);
+  let ymin = opts.ymin != null ? opts.ymin : Math.min(...ys);
+  let ymax = opts.ymax != null ? opts.ymax : Math.max(...ys);
+  if (ymin === ymax) { ymin -= 0.5; ymax += 0.5; }
+  const px = x => pad.l + ((x - xmin) / (xmax - xmin || 1)) * iw;
+  const py = y => pad.t + ih - ((y - ymin) / (ymax - ymin || 1)) * ih;
+
+  // gridlines
+  ctx.strokeStyle = "#232a34"; ctx.lineWidth = 1; ctx.beginPath();
+  for (let i = 0; i <= 4; i++) {
+    const y = pad.t + (ih * i) / 4;
+    ctx.moveTo(pad.l, y); ctx.lineTo(pad.l + iw, y);
+  }
+  ctx.stroke();
+
+  // y-axis labels
+  ctx.fillStyle = "#8590a6"; ctx.font = "11px system-ui"; ctx.textAlign = "right";
+  for (let i = 0; i <= 4; i++) {
+    const v = ymax - ((ymax - ymin) * i) / 4;
+    const y = pad.t + (ih * i) / 4;
+    ctx.fillText(opts.yfmt ? opts.yfmt(v) : v.toFixed(2), pad.l - 6, y + 3);
+  }
+  ctx.textAlign = "left";
+  ctx.fillText(opts.xlabel || "", pad.l, H - 6);
+
+  // series lines
+  for (const s of series) {
+    if (!s.points.length) continue;
+    // Downsample for rendering perf (never modifies s.points itself).
+    const pts = s.points.length > 800 ? lttb(s.points, 800) : s.points;
+    ctx.strokeStyle = s.color || "#4f8bf9"; ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    pts.forEach((p, i) => {
+      const x = px(p[0]), y = py(p[1]);
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+  }
+
+  // crosshair
+  if (crosshairX != null && crosshairX >= xmin && crosshairX <= xmax) {
+    const x = px(crosshairX);
+    ctx.strokeStyle = "rgba(230,232,238,0.35)"; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(x, pad.t); ctx.lineTo(x, pad.t + ih); ctx.stroke();
+  }
+
+  // cache axis info for interaction
+  canvas._axis = { xmin, xmax, ymin, ymax, px, py, pad, W, H };
+}
+
+function drawStackedBars(canvas, steps, opts = {}) {
+  const draw = () => _drawStacked(canvas, steps, opts);
+  registerChart(canvas, draw);
+  draw();
+  attachInteraction(canvas, null, opts, "stacked", steps);
+}
+
+function _drawStacked(canvas, steps, opts) {
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * dpr; canvas.height = rect.height * dpr;
+  const ctx = canvas.getContext("2d"); ctx.scale(dpr, dpr);
+  const W = rect.width, H = rect.height;
+  const pad = { l: 48, r: 12, t: 8, b: 22 };
+  const iw = W - pad.l - pad.r, ih = H - pad.t - pad.b;
+  if (!steps.length) {
+    ctx.fillStyle = "#8590a6"; ctx.font = "12px system-ui";
+    ctx.fillText("no steps yet", pad.l, H / 2); return;
+  }
+  const layers = [
+    { key: "inter_step_gap_s",  color: "#f5a623", label: "dataloader wait" },
+    { key: "forward_s",         color: "#4f8bf9", label: "forward" },
+    { key: "backward_s",        color: "#b57edc", label: "backward" },
+    { key: "optimizer_s",       color: "#52c41a", label: "optimizer" },
+    { key: "comm_s",            color: "#ff6b6b", label: "comm" },
+  ];
+  const totals = steps.map(s => layers.reduce((a, l) => a + (s[l.key] || 0), 0));
+  const ymax = Math.max(...totals) * 1.1 || 1;
+  ctx.fillStyle = "#8590a6"; ctx.font = "11px system-ui"; ctx.textAlign = "right";
+  for (let i = 0; i <= 4; i++) {
+    const v = ymax * (1 - i / 4);
+    const y = pad.t + (ih * i) / 4;
+    ctx.fillText((v * 1000).toFixed(0) + " ms", pad.l - 6, y + 3);
+    ctx.strokeStyle = "#232a34"; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(pad.l + iw, y); ctx.stroke();
+  }
+  const bw = Math.max(1, iw / steps.length - 1);
+  steps.forEach((s, i) => {
+    let acc = 0;
+    for (const l of layers) {
+      const v = s[l.key] || 0;
+      const y0 = pad.t + ih - ((acc + v) / ymax) * ih;
+      const h = (v / ymax) * ih;
+      ctx.fillStyle = l.color;
+      ctx.fillRect(pad.l + i * (iw / steps.length), y0, bw, h);
+      acc += v;
+    }
+  });
+  // stash for hover
+  canvas._axis = { pad, W, H, iw, ih, steps, layers, ymax };
+}
+
+function attachInteraction(canvas, series, opts, kind, stackedSteps) {
+  if (canvas._interactionAttached) return;
+  canvas._interactionAttached = true;
+  const tt = $("#tooltip");
+  canvas.addEventListener("mousemove", ev => {
+    const rect = canvas.getBoundingClientRect();
+    const mx = ev.clientX - rect.left;
+    const axis = canvas._axis;
+    if (!axis) return;
+    if (kind === "line") {
+      const { xmin, xmax, pad, W } = axis;
+      if (mx < pad.l || mx > W - pad.r) { tt.style.display = "none"; return; }
+      const xval = xmin + (mx - pad.l) / (W - pad.l - pad.r) * (xmax - xmin);
+      broadcastCrosshair(xval);
+      // Nearest point per series
+      const rows = [];
+      const seriesLive = canvas._lastSeries || series;
+      for (const s of seriesLive) {
+        if (!s.points.length) continue;
+        let best = s.points[0], bd = Infinity;
+        for (const p of s.points) {
+          const d = Math.abs(p[0] - xval);
+          if (d < bd) { bd = d; best = p; }
+        }
+        rows.push({ label: s.label || s.color, color: s.color,
+                    x: best[0], y: best[1] });
+      }
+      if (!rows.length) { tt.style.display = "none"; return; }
+      tt.innerHTML = "";
+      tt.appendChild(el("div", { class: "k" }, `t=${rows[0].x.toFixed(1)}s`));
+      for (const r of rows) {
+        tt.appendChild(el("div", {}, [
+          el("span", { style: { color: r.color } }, "● "),
+          `${r.label}: ${opts.yfmt ? opts.yfmt(r.y) : r.y.toFixed(3)}`,
+        ]));
+      }
+      tt.style.display = "block";
+      tt.style.left = (ev.clientX + 12) + "px";
+      tt.style.top = (ev.clientY + 12) + "px";
+    } else if (kind === "stacked") {
+      const { pad, W, iw, steps, layers } = axis;
+      if (mx < pad.l || mx > W - pad.r) { tt.style.display = "none"; return; }
+      const i = Math.min(steps.length - 1,
+        Math.floor((mx - pad.l) / (iw / steps.length)));
+      const s = steps[i];
+      const total = layers.reduce((a, l) => a + (s[l.key] || 0), 0);
+      tt.innerHTML = "";
+      tt.appendChild(el("div", { class: "k" }, `step ${s.step}`));
+      tt.appendChild(el("div", {}, `total: ${(total * 1000).toFixed(1)} ms`));
+      for (const l of layers) {
+        if (!s[l.key]) continue;
+        tt.appendChild(el("div", {}, [
+          el("span", { style: { color: l.color } }, "● "),
+          `${l.label}: ${(s[l.key] * 1000).toFixed(1)} ms`,
+        ]));
+      }
+      if (s.loss != null) tt.appendChild(el("div", { class: "k" }, `loss ${s.loss.toFixed(4)}`));
+      tt.style.display = "block";
+      tt.style.left = (ev.clientX + 12) + "px";
+      tt.style.top = (ev.clientY + 12) + "px";
+    }
+  });
+  canvas.addEventListener("mouseleave", () => {
+    $("#tooltip").style.display = "none";
+    broadcastCrosshair(null);
+  });
+  // stash live series for tooltip lookup
+  canvas._lastSeries = series;
+}
+
+// ================= state + routing =================
+const state = { ws: null, timeWindowS: null };
+
+function setStatus(text, live = false) {
+  $("#status-text").textContent = text;
+  $("#status").classList.toggle("live", live);
+}
+function setCrumb(html) { $("#crumb-tail").innerHTML = html; }
+
+async function boot() {
+  let who;
+  try { who = await fetch("/api/whoami").then(r => r.json()); }
+  catch (e) { setStatus("server unreachable"); return; }
+  if (who.auth === "required") { renderLogin(); return; }
+  if (who.auth === "ok") $("#logout").style.display = "inline";
+  $("#logout").addEventListener("click", async () => {
+    await apiFetch("/api/logout", { method: "POST" });
+    location.reload();
+  });
+  router();
+}
+
+async function router() {
+  if (state.ws) { try { state.ws.close(); } catch(_){} state.ws = null; }
+  chartRegistry.clear();
+  const app = $("#app"); app.innerHTML = "";
+  const hash = location.hash || "#/";
+  let m;
+  if ((m = hash.match(/^#\/run\/(\d+)/))) return viewRun(parseInt(m[1], 10));
+  if ((m = hash.match(/^#\/group\/(.+)$/))) return viewGroup(decodeURIComponent(m[1]));
+  if ((m = hash.match(/^#\/compare\?runs=([\d,]+)/))) {
+    return viewCompare(m[1].split(",").map(x => parseInt(x, 10)));
+  }
+  return viewRunList();
+}
+window.addEventListener("hashchange", router);
+
+// ================= login =================
+function renderLogin() {
+  setCrumb(""); setStatus("sign in");
+  const app = $("#app");
+  app.appendChild(el("div", { class: "card login-wrap" }, [
+    el("h2", {}, "sign in"),
+    el("form", { id: "login-form" }, [
+      el("input", { type: "password", name: "password", placeholder: "viewer password", autofocus: "" }),
+      el("button", { type: "submit" }, "continue"),
+      el("div", { class: "login-err", id: "login-err" }, ""),
+    ]),
+  ]));
+  $("#login-form").addEventListener("submit", async e => {
+    e.preventDefault();
+    const r = await fetch("/api/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password: e.target.password.value }),
+    });
+    if (r.ok) location.reload();
+    else {
+      const msg = r.status === 429 ? "too many attempts — wait a minute" : "bad password";
+      $("#login-err").textContent = msg;
+    }
+  });
+}
+
+// ================= run list =================
+async function viewRunList() {
+  setCrumb(""); setStatus("idle");
+  const app = $("#app");
+  const wrap = el("div", { class: "card" }, [
+    el("h2", {}, [
+      "runs",
+      el("span", { class: "h2-right", id: "runs-actions" }, ""),
+    ]),
+    el("div", { id: "runs" }, el("div", { class: "empty" }, "loading…")),
+  ]);
+  app.appendChild(wrap);
+
+  let runs;
+  try { runs = await fetch("/api/runs").then(r => r.json()); }
+  catch(e) { $("#runs").innerHTML = ""; $("#runs").appendChild(el("div",{class:"empty"},"error loading")); return; }
+
+  // group runs with a group_id
+  const groups = new Map();
+  const ungrouped = [];
+  for (const r of runs) {
+    if (r.group_id) {
+      if (!groups.has(r.group_id)) groups.set(r.group_id, []);
+      groups.get(r.group_id).push(r);
+    } else ungrouped.push(r);
+  }
+
+  const container = $("#runs"); container.innerHTML = "";
+  if (!runs.length) {
+    container.appendChild(el("div", { class: "empty" },
+      "No runs yet. Point a client at this server via GPUPROF_SERVER."));
+    return;
+  }
+
+  if (groups.size) {
+    const gs = el("div", { style: { marginBottom: "16px" } }, [
+      el("div", { style: { color: "var(--muted)", fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "8px" } }, "distributed groups"),
+      ...Array.from(groups.entries()).map(([gid, rs]) => {
+        const anyLive = rs.some(r => r.ended_at == null);
+        return el("a", { href: `#/group/${encodeURIComponent(gid)}`, style: { display: "inline-block", marginRight: "8px", marginBottom: "6px" } }, [
+          el("span", { class: "pill " + (anyLive ? "live" : "ended") }, `${gid} · ${rs.length} ranks`),
+        ]);
+      }),
+    ]);
+    container.appendChild(gs);
+  }
+
+  const selectedIds = new Set();
+  const compareBtn = el("button", { onClick: () => {
+    if (selectedIds.size < 2) return;
+    location.hash = `#/compare?runs=${Array.from(selectedIds).join(",")}`;
+  } }, "compare selected");
+  compareBtn.disabled = true;
+  $("#runs-actions").appendChild(compareBtn);
+  function updateCompareBtn() {
+    compareBtn.disabled = selectedIds.size < 2;
+    compareBtn.textContent = `compare (${selectedIds.size})`;
+  }
+  updateCompareBtn();
+
+  const tbl = el("table", {}, [
+    el("thead", {}, el("tr", {}, [
+      el("th", {}, ""),
+      el("th", {}, "run"), el("th", {}, "gpu"),
+      el("th", {}, "rank"), el("th", {}, "status"),
+      el("th", {}, "started"), el("th", {}, "duration"),
+    ])),
+    el("tbody", {}, runs.map(r => {
+      const live = r.ended_at == null;
+      const dur = r.ended_at ? (r.ended_at - r.started_at) : (Date.now()/1000 - r.started_at);
+      const gpuCount = (r.meta && r.meta.gpu_indices && r.meta.gpu_indices.length) || 1;
+      const gpuLabel = r.gpu + (gpuCount > 1 ? ` × ${gpuCount}` : "");
+      const cb = el("input", { type: "checkbox", onClick: e => {
+        e.stopPropagation();
+        if (e.target.checked) selectedIds.add(r.id);
+        else selectedIds.delete(r.id);
+        updateCompareBtn();
+      } });
+      return el("tr", { class: "clickable", onClick: e => {
+        if (e.target.tagName === "INPUT") return;
+        location.hash = `#/run/${r.id}`;
+      } }, [
+        el("td", {}, cb),
+        el("td", {}, [
+          el("strong", {}, r.name || `run ${r.id}`),
+          el("div", { style: { color: "var(--muted)", fontSize: "11px" } }, `run ${r.id}`),
+        ]),
+        el("td", {}, gpuLabel),
+        el("td", {}, r.rank != null ? `${r.rank}/${r.world_size || "?"}` : "—"),
+        el("td", {}, el("span", { class: "pill " + (live ? "live" : "ended") }, live ? "live" : "ended")),
+        el("td", {}, fmt.ago(r.started_at)),
+        el("td", {}, fmt.s(dur)),
+      ]);
+    })),
+  ]);
+  container.appendChild(tbl);
+}
+
+// ================= run detail =================
+function timeWindowFilter(samples) {
+  if (!state.timeWindowS || !samples.length) return samples;
+  const t_end = samples[samples.length - 1].t;
+  const t_start = t_end - state.timeWindowS;
+  return samples.filter(s => s.t >= t_start);
+}
+
+async function viewRun(runId) {
+  setCrumb(` / <strong>run ${runId}</strong>`);
+  const app = $("#app");
+  app.innerHTML = `
+    <div class="card">
+      <div class="row-flex" style="justify-content: space-between; margin-bottom: 8px;">
+        <div>
+          <strong id="run-name" style="font-size: 18px;">…</strong>
+          <span class="pill" id="run-status" style="margin-left: 10px;">…</span>
+        </div>
+        <div id="run-gpu" style="color: var(--muted); font-size: 13px;"></div>
+      </div>
+      <div class="ctrl-row">
+        <label>time window:
+          <select id="tw">
+            <option value="">all</option><option value="60">last 1m</option>
+            <option value="300">last 5m</option><option value="900">last 15m</option>
+            <option value="3600">last 1h</option>
+          </select>
+        </label>
+        <span style="color:var(--muted)">hover a chart for a tooltip; the crosshair syncs across all charts</span>
+      </div>
+      <div class="stats" id="stats"></div>
+    </div>
+    <div class="grid two">
+      <div class="card">
+        <h2>step time · phase breakdown <span class="h2-right">last 80 steps</span></h2>
+        <canvas id="c-phases"></canvas>
+        <div class="legend">
+          <span><span class="sw" style="background:#f5a623"></span>dataloader wait (inter-step)</span>
+          <span><span class="sw" style="background:#4f8bf9"></span>forward</span>
+          <span><span class="sw" style="background:#b57edc"></span>backward</span>
+          <span><span class="sw" style="background:#52c41a"></span>optimizer</span>
+          <span><span class="sw" style="background:#ff6b6b"></span>comm</span>
+        </div>
+      </div>
+      <div class="card"><h2>SM utilization</h2><canvas id="c-util"></canvas><div class="legend" id="l-util"></div></div>
+    </div>
+    <div class="grid two">
+      <div class="card"><h2>memory used</h2><canvas id="c-mem"></canvas><div class="legend" id="l-mem"></div></div>
+      <div class="card"><h2>power draw</h2><canvas id="c-pwr"></canvas><div class="legend" id="l-pwr"></div></div>
+    </div>
+    <div class="card">
+      <h2 id="kernels-h">top kernels (last trace)</h2>
+      <div id="kernels" class="empty">no traces yet — traces are only recorded when <code>trace_every_n_steps</code> is set on the profiler</div>
+    </div>
+    <div class="card">
+      <h2>insights</h2>
+      <div id="insights" class="empty">computing…</div>
+    </div>
+  `;
+
+  $("#tw").addEventListener("change", e => {
+    state.timeWindowS = e.target.value ? parseInt(e.target.value, 10) : null;
+    redraw();
+  });
+
+  const view = { runId, samples: [], steps: [], meta: {}, gpu: "", name: "",
+                 ended: false, latestTrace: null };
+
+  const proto = location.protocol === "https:" ? "wss" : "ws";
+  const ws = new WebSocket(`${proto}://${location.host}/watch/${runId}`);
+  state.ws = ws;
+  setStatus("connecting…");
+  ws.onopen = () => setStatus("live", true);
+  ws.onclose = ev => {
+    if (ev.code === 1008) { setStatus("auth required"); location.reload(); }
+    else setStatus("disconnected");
+  };
+  ws.onerror = () => setStatus("error");
+  ws.onmessage = ev => {
+    const msg = JSON.parse(ev.data);
+    if (msg.kind === "snapshot") {
+      view.samples = msg.samples || [];
+      view.steps = msg.steps || [];
+      view.meta = msg.meta || {};
+      view.gpu = msg.gpu_name || "";
+      view.name = msg.name || `run ${runId}`;
+      view.latestTrace = msg.latest_trace || null;
+      const gpuCount = (view.meta.gpu_indices && view.meta.gpu_indices.length) || 1;
+      $("#run-name").textContent = view.name;
+      $("#run-gpu").textContent = view.gpu + (gpuCount > 1 ? ` × ${gpuCount}` : "")
+                                 + (view.meta.dtype ? ` · ${view.meta.dtype}` : "");
+      redraw(); renderKernels(); loadInsights();
+    } else if (msg.kind === "batch") {
+      // Server sends one WS message per ingest POST (one every ~1s).
+      // Fan the arrays out into view state, capped so long runs don't
+      // blow browser memory.
+      if (msg.samples && msg.samples.length) {
+        view.samples.push(...msg.samples);
+        if (view.samples.length > 30000)
+          view.samples.splice(0, view.samples.length - 30000);
+      }
+      if (msg.steps && msg.steps.length) {
+        view.steps.push(...msg.steps);
+        if (view.steps.length > 10000)
+          view.steps.splice(0, view.steps.length - 10000);
+      }
+      if (msg.traces && msg.traces.length) {
+        view.latestTrace = msg.traces[msg.traces.length - 1];
+        renderKernels();
+      }
+      redraw();
+    } else if (msg.kind === "end") {
+      view.ended = true;
+      $("#run-status").textContent = "ended";
+      $("#run-status").className = "pill ended";
+      setStatus("ended");
+      loadInsights();
+    }
+  };
+
+  function groupByGpu(samples, valueFn) {
+    const by = new Map();
+    const t0 = samples.length ? samples[0].t : 0;
+    for (const s of samples) {
+      if (!by.has(s.gpu_index)) by.set(s.gpu_index, []);
+      by.get(s.gpu_index).push([s.t - t0, valueFn(s)]);
+    }
+    const indices = Array.from(by.keys()).sort((a, b) => a - b);
+    return indices.map((idx, i) => ({
+      label: `gpu ${idx}`, color: PALETTE[i % PALETTE.length],
+      points: by.get(idx),
+    }));
+  }
+
+  function fillLegend(id, series) {
+    const l = $("#" + id);
+    if (!l) return;
+    l.innerHTML = "";
+    if (series.length <= 1) return;
+    for (const s of series) {
+      l.appendChild(el("span", {}, [
+        el("span", { class: "sw", style: { background: s.color } }), s.label,
+      ]));
+    }
+  }
+
+  function redraw() {
+    const s = timeWindowFilter(view.samples);
+    const st = view.steps;
+    const running = !view.ended;
+    $("#run-status").textContent = running ? "live" : "ended";
+    $("#run-status").className = "pill " + (running ? "live" : "ended");
+
+    const avgUtil = avg(s.map(p => p.sm_util));
+    const avgPwr = avg(s.map(p => p.power_w));
+    const lastByGpu = new Map();
+    for (const p of s) lastByGpu.set(p.gpu_index, p);
+    const memUsed = Array.from(lastByGpu.values()).reduce((a, p) => a + (p.mem_used_bytes || 0), 0) || null;
+    const memTot  = Array.from(lastByGpu.values()).reduce((a, p) => a + (p.mem_total_bytes || 0), 0) || null;
+    const avgStep = avg(st.map(x => (x.t_end - x.t_start)));
+
+    const stats = $("#stats"); stats.innerHTML = "";
+    for (const [l, val, unit] of [
+      ["steps", st.length, ""],
+      ["avg step", avgStep == null ? "—" : (avgStep * 1000).toFixed(1), "ms"],
+      ["avg SM util", avgUtil == null ? "—" : (avgUtil*100).toFixed(0), "%"],
+      ["avg power", avgPwr == null ? "—" : avgPwr.toFixed(0), "W"],
+      ["mem", memUsed == null ? "—" : (memUsed/1e9).toFixed(1), memTot ? `/ ${(memTot/1e9).toFixed(0)} GB` : "GB"],
+    ]) {
+      stats.appendChild(el("div", { class: "stat" }, [
+        el("div", {}, [el("span", { class: "n" }, String(val)), el("span", { class: "u" }, unit)]),
+        el("div", { class: "l" }, l),
+      ]));
+    }
+
+    drawStackedBars($("#c-phases"), st.slice(-80));
+    const utilSeries = groupByGpu(s, p => p.sm_util);
+    const memSeries  = groupByGpu(s, p => p.mem_used_bytes / 1e9);
+    const pwrSeries  = groupByGpu(s, p => p.power_w);
+    drawLine($("#c-util"), utilSeries, { ymin: 0, ymax: 1, yfmt: v => (v*100).toFixed(0) + "%", xlabel: "seconds" });
+    drawLine($("#c-mem"), memSeries,  { ymin: 0, yfmt: v => v.toFixed(1) + " GB", xlabel: "seconds" });
+    drawLine($("#c-pwr"), pwrSeries,  { ymin: 0, yfmt: v => v.toFixed(0) + " W",  xlabel: "seconds" });
+    fillLegend("l-util", utilSeries);
+    fillLegend("l-mem",  memSeries);
+    fillLegend("l-pwr",  pwrSeries);
+  }
+
+  function renderKernels() {
+    const box = $("#kernels");
+    const tr = view.latestTrace;
+    if (!tr || !tr.kernels || !tr.kernels.length) {
+      box.className = "empty";
+      box.innerHTML = "no traces yet — traces are only recorded when <code>trace_every_n_steps</code> is set on the profiler";
+      $("#kernels-h").textContent = "top kernels (last trace)";
+      return;
+    }
+    box.className = "";
+    $("#kernels-h").textContent = `top kernels · trace @ step ${tr.step}`;
+    const top = tr.kernels.slice(0, 15);
+    const totalSelf = top.reduce((a, k) => a + (k.self_device_us || k.self_cpu_us || 0), 0) || 1;
+    box.innerHTML = "";
+    box.appendChild(el("table", {}, [
+      el("thead", {}, el("tr", {}, [
+        el("th", {}, "kernel"), el("th", {}, "share"),
+        el("th", {}, "self time"), el("th", {}, "total"), el("th", {}, "calls"),
+      ])),
+      el("tbody", {}, top.map(k => {
+        const self = k.self_device_us || k.self_cpu_us || 0;
+        const total = k.device_us || k.cpu_us || 0;
+        const share = self / totalSelf;
+        return el("tr", {}, [
+          el("td", { class: "k-name" }, k.name),
+          el("td", {}, [
+            el("span", { class: "bar", style: { width: Math.max(2, share*120) + "px" } }),
+            (share*100).toFixed(1) + "%",
+          ]),
+          el("td", {}, fmt.us(self)),
+          el("td", {}, fmt.us(total)),
+          el("td", {}, String(k.count)),
+        ]);
+      })),
+    ]));
+  }
+
+  async function loadInsights() {
+    try {
+      const r = await fetch(`/api/runs/${runId}/insights`).then(r => r.json());
+      const box = $("#insights"); box.innerHTML = ""; box.className = "";
+      for (const it of r.insights || []) {
+        box.appendChild(el("div", { class: "insight " + it.severity }, [
+          el("div", { class: "title" }, it.title),
+          el("div", { class: "rec" }, it.recommendation),
+        ]));
+      }
+    } catch (e) {
+      $("#insights").textContent = "insights unavailable";
+    }
+  }
+}
+
+// ================= compare view =================
+async function viewCompare(runIds) {
+  setCrumb(` / <strong>compare ${runIds.join(", ")}</strong>`);
+  setStatus("compare");
+  const app = $("#app");
+  app.appendChild(el("div", { class: "card" }, [
+    el("h2", {}, `comparing ${runIds.length} runs`),
+    el("div", { id: "compare-body" }, el("div", { class: "empty" }, "loading…")),
+  ]));
+
+  const runs = await Promise.all(runIds.map(async id => {
+    const meta = await fetch(`/api/runs/${id}`).then(r => r.json());
+    const insights = await fetch(`/api/runs/${id}/insights`).then(r => r.json()).catch(() => null);
+    return { id, meta, insights };
+  }));
+
+  const body = $("#compare-body");
+  body.innerHTML = "";
+
+  // Headline stats table
+  const rows = [];
+  rows.push(["metric", ...runs.map(r => `run ${r.id}`)]);
+  const s0 = i => runs[i].insights?.summary || {};
+  rows.push(["gpu", ...runs.map(r => r.meta.gpu)]);
+  rows.push(["dtype", ...runs.map(r => r.meta.meta?.dtype || "—")]);
+  rows.push(["steps", ...runs.map((_, i) => s0(i).n_steps ?? "—")]);
+  rows.push(["avg step (ms)", ...runs.map((_, i) => ((s0(i).avg_step_s || 0) * 1000).toFixed(1))]);
+  rows.push(["MFU", ...runs.map((_, i) => s0(i).mfu != null ? (s0(i).mfu * 100).toFixed(1) + "%" : "—")]);
+  rows.push(["avg SM util", ...runs.map((_, i) => s0(i).avg_sm_util != null ? (s0(i).avg_sm_util * 100).toFixed(0) + "%" : "—")]);
+  rows.push(["inter-step gap (ms)", ...runs.map((_, i) => s0(i).inter_step_gap_s != null ? (s0(i).inter_step_gap_s * 1000).toFixed(1) : "—")]);
+  rows.push(["insights", ...runs.map(r => (r.insights?.insights || []).length)]);
+
+  const tbl = el("table", {}, [
+    el("tbody", {}, rows.map((r, i) =>
+      el("tr", {}, r.map(c => el(i === 0 ? "th" : "td", {}, String(c)))))),
+  ]);
+  body.appendChild(tbl);
+
+  // Side-by-side insights
+  body.appendChild(el("div", { class: "grid two", style: { marginTop: "16px" } },
+    runs.map(r => el("div", { class: "card" }, [
+      el("h2", {}, [
+        `run ${r.id}: ${r.meta.name}`,
+        el("span", { class: "h2-right" }, `on ${r.meta.gpu}`),
+      ]),
+      ...(r.insights?.insights || []).map(it =>
+        el("div", { class: "insight " + it.severity }, [
+          el("div", { class: "title" }, it.title),
+          el("div", { class: "rec" }, it.recommendation),
+        ])),
+    ]))));
+}
+
+// ================= group / rank overlay view =================
+async function viewGroup(groupId) {
+  setCrumb(` / <strong>group ${groupId}</strong>`);
+  setStatus("group");
+  const app = $("#app");
+  app.appendChild(el("div", { class: "card" }, [
+    el("h2", {}, `distributed group ${groupId}`),
+    el("div", { id: "gbody" }, el("div", { class: "empty" }, "loading…")),
+  ]));
+
+  const g = await fetch(`/api/groups/${encodeURIComponent(groupId)}`).then(r => r.json());
+  const insights = await fetch(`/api/groups/${encodeURIComponent(groupId)}/insights`)
+    .then(r => r.json()).catch(() => null);
+
+  const body = $("#gbody");
+  body.innerHTML = "";
+
+  // Ranks table with links
+  body.appendChild(el("table", {}, [
+    el("thead", {}, el("tr", {}, ["rank", "run", "gpu", "status"].map(h => el("th", {}, h)))),
+    el("tbody", {}, g.runs.map(r => {
+      const live = r.ended_at == null;
+      return el("tr", { class: "clickable", onClick: () => location.hash = `#/run/${r.id}` }, [
+        el("td", {}, r.rank != null ? String(r.rank) : "—"),
+        el("td", {}, [
+          el("strong", {}, r.name),
+          el("div", { style: { color: "var(--muted)", fontSize: "11px" } }, `run ${r.id}`),
+        ]),
+        el("td", {}, r.gpu),
+        el("td", {}, el("span", { class: "pill " + (live ? "live" : "ended") }, live ? "live" : "ended")),
+      ]);
+    })),
+  ]));
+
+  // Group insights (rank skew)
+  if (insights && insights.insights) {
+    body.appendChild(el("div", { style: { marginTop: "16px" } }, [
+      el("h2", { style: { color: "var(--muted)", fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "12px" } }, "group insights"),
+      ...insights.insights.map(it => el("div", { class: "insight " + it.severity }, [
+        el("div", { class: "title" }, it.title),
+        el("div", { class: "rec" }, it.recommendation),
+      ])),
+    ]));
+  }
+}
+
+function avg(arr) {
+  const xs = arr.filter(v => v != null);
+  if (!xs.length) return null;
+  return xs.reduce((a, b) => a + b, 0) / xs.length;
+}
+
+boot();
+</script>
+</body>
+</html>
