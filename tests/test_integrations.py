@@ -52,10 +52,12 @@ def test_lightning_callback_lifecycle_simulated(tmp_path):
     rows = conn.execute("SELECT step, forward_s, backward_s, optimizer_s, loss FROM steps").fetchall()
     conn.close()
     assert len(rows) == 3
+    # Upper bounds generous for shared CI — see DeepSpeed test below
+    # for the same rationale.
     for step, fw, bw, op, loss in rows:
-        assert fw and 0.003 <= fw <= 0.05
-        assert bw and 0.003 <= bw <= 0.05
-        assert op and 0.001 <= op <= 0.05
+        assert fw and 0.003 <= fw <= 0.300, fw
+        assert bw and 0.003 <= bw <= 0.300, bw
+        assert op and 0.001 <= op <= 0.300, op
         assert loss == 0.5
 
 
@@ -113,10 +115,13 @@ def test_deepspeed_wrapper_captures_all_three_phases(tmp_path):
     rows = conn.execute("SELECT step, forward_s, backward_s, optimizer_s, loss FROM steps ORDER BY step").fetchall()
     conn.close()
     assert len(rows) == 4
+    # Upper bounds widened for shared CI runners — nominal sleeps
+    # are 5 / 3 / 2 ms; on macOS-latest runners they can measure up
+    # to ~55 ms. Lower bounds still catch "phase not measured".
     for step, fw, bw, op, loss in rows:
-        assert fw and 0.003 <= fw <= 0.05
-        assert bw and 0.001 <= bw <= 0.05
-        assert op and 0.0005 <= op <= 0.05
+        assert fw and 0.003 <= fw <= 0.300, fw
+        assert bw and 0.001 <= bw <= 0.300, bw
+        assert op and 0.0005 <= op <= 0.300, op
         assert loss == 0.42
     assert ds.forward_calls == 4 and ds.backward_calls == 4 and ds.step_calls == 4
 
