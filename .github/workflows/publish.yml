@@ -59,3 +59,8 @@ jobs:
           name: dist
           path: dist/
       - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          # Idempotent: a re-run of the same tag / a duplicate
+          # workflow_dispatch just exits 0 instead of failing with
+          # 400 File already exists. First upload still publishes.
+          skip-existing: true
