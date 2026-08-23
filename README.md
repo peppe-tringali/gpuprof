@@ -6,9 +6,11 @@
 
 Tells you *why* your GPU is slow, not just that it is.
 
-[![tests](https://img.shields.io/badge/tests-157%20passing-success)](TESTING.md)
-[![python](https://img.shields.io/badge/python-3.9%2B-blue)]()
-[![license](https://img.shields.io/badge/license-MIT-lightgrey)]()
+[![PyPI](https://img.shields.io/pypi/v/gpuprof.svg)](https://pypi.org/project/gpuprof/)
+[![CI](https://github.com/peppe-tringali/gpuprof/actions/workflows/test.yml/badge.svg)](https://github.com/peppe-tringali/gpuprof/actions/workflows/test.yml)
+[![python](https://img.shields.io/pypi/pyversions/gpuprof.svg)](https://pypi.org/project/gpuprof/)
+[![license](https://img.shields.io/pypi/l/gpuprof.svg)](https://github.com/peppe-tringali/gpuprof/blob/main/LICENSE)
+[![downloads](https://img.shields.io/pypi/dm/gpuprof.svg)](https://pypi.org/project/gpuprof/)
 
 </div>
 
@@ -33,8 +35,10 @@ Every ML observability tool shows you numbers. `nvidia-smi` gives you SM utiliza
 ## 30-second quickstart
 
 ```bash
-pip install -e ".[server,host]"
+pip install "gpuprof[server,host,nvidia,torch]"
 ```
+
+For a bare install (mock-GPU mode, useful for CI): `pip install gpuprof`
 
 Add two lines to your training script:
 

@@ -372,3 +372,56 @@ GPUPROF_MOCK=1 GPUPROF_MOCK_GPUS=4 GPUPROF_SERVER=http://127.0.0.1:8000 \
 You should see a mocked 4-GPU run with live-updating charts, phase
 breakdown, and one or two insights fired. That's the whole product
 loop working end to end.
+
+## 7. Real-GPU smoke test (post-PyPI publish)
+
+The mock-GPU path above proves the code paths. This section proves
+the *published* package works on real hardware — the thing users
+actually get from `pip install gpuprof`.
+
+Prerequisites: any SSH-able Linux box with an NVIDIA GPU + a recent
+NVIDIA driver. Any T4, A10, L4 rental works ($0.35/hr on Lambda,
+Vast, RunPod). Total time: ~15 minutes.
+
+```bash
+# 1. Install from the published PyPI wheel (not the local repo).
+python -m venv ~/gp-smoke && source ~/gp-smoke/bin/activate
+pip install "gpuprof[server,host,nvidia,torch]"
+
+# 2. Verify environment.
+gpuprof selfcheck
+# Expect: 0 fail, ideally 0 warn. `nvml` line should show your GPU
+# model + driver version. If nvml warns "pynvml not installed",
+# the [nvidia] extra didn't resolve — reinstall.
+
+# 3. Tiny training loop against real NVML.
+cat > tiny.py <<'PY'
+import torch, torch.nn as nn, gpuprof
+model = nn.Sequential(nn.Linear(1024, 4096), nn.ReLU(), nn.Linear(4096, 1024)).cuda()
+opt = torch.optim.AdamW(model.parameters(), lr=1e-3)
+with gpuprof.profile("smoke-real-gpu", summary=True, dashboard=True):
+    for i in range(50):
+        x = torch.randn(64, 1024, device="cuda")
+        loss = model(x).sum()
+        loss.backward()
+        opt.step()
+        opt.zero_grad()
+PY
+python tiny.py
+# Expect: end-of-run summary prints; a local dashboard URL prints
+# ("http://127.0.0.1:PORT"). SSH-forward that port or `curl` it.
+
+# 4. Confirm SQLite writeback.
+sqlite3 ~/.gpuprof/gpuprof.db \
+    "SELECT run_id, name, n_steps FROM runs ORDER BY run_id DESC LIMIT 1;"
+# Expect: one row, n_steps around 50.
+
+# 5. Confirm the offline HTML report renders.
+gpuprof report ~/.gpuprof/gpuprof.db 1 --out=/tmp/r.html
+ls -lh /tmp/r.html
+# Expect: a self-contained HTML file, > 20 KB, with the sparklines
+# and insights visible when opened in a browser.
+```
+
+If any step fails, the bug is real and worth a v0.7.2 patch — the
+mock-GPU CI can't catch NVML/driver issues.

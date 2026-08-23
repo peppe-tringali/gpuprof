@@ -1,9 +1,10 @@
 [project]
 name = "gpuprof"
-version = "0.7.0"
+version = "0.7.1"
 description = "Live GPU profiler + insight engine for PyTorch training"
 readme = "README.md"
-license = { file = "LICENSE" }
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.9"
 authors = [{ name = "Giuseppe Tringali", email = "gtringali4@gmail.com" }]
 keywords = ["pytorch", "gpu", "profiling", "mlops", "training", "cuda", "nvml"]
@@ -11,7 +12,6 @@ classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "Intended Audience :: Science/Research",
-    "License :: OSI Approved :: MIT License",
     "Operating System :: POSIX :: Linux",
     "Operating System :: MacOS",
     "Programming Language :: Python :: 3",
@@ -43,7 +43,7 @@ postgres = ["psycopg[binary]>=3.1", "psycopg-pool>=3.1"]
 dev = ["pytest>=7", "httpx>=0.25", "pytest-asyncio>=0.21", "psutil>=5.9"]
 
 [build-system]
-requires = ["setuptools>=61"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]

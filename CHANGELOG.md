@@ -6,7 +6,28 @@ minor-version bumps may contain schema migrations that require an
 existing `gpuprof.db` to be rebuilt (they're always additive — old
 DBs auto-migrate).
 
-## [Unreleased]
+## [0.7.1] — 2026-08-23
+
+### Fixed
+- Packaging: switched to SPDX `license = "MIT"` +
+  `license-files = ["LICENSE"]` (setuptools ≥ 77). Silences the
+  deprecation warnings that would break builds after 2027-02-18.
+- Makefile `verify-wheel` glob (`'dist/*.whl[extras]'` was single-
+  quoted, so pip received the literal). Now the wheel path is
+  resolved by shell before being passed to pip.
+- Makefile wheel-preview: replaced an over-clever python one-liner
+  with `unzip -l`.
+
+### Added
+- Trusted-Publishing workflow (`.github/workflows/publish.yml`) —
+  `git push --tags v*.*.*` now publishes to PyPI from CI via OIDC,
+  no `~/.pypirc` needed on the release machine.
+- README badges now sourced from live PyPI + Actions status
+  (version, python versions, license, download count, CI health).
+
+## [0.7.0] — 2026-08-23
+
+First PyPI release. Content as [Unreleased] below.
 
 ### Added
 - `LICENSE` (MIT).

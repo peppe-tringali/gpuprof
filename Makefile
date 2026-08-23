@@ -34,14 +34,15 @@ build: clean
 	$(VENV)/bin/twine check dist/*
 	@echo
 	@echo "== wheel contents preview =="
-	@$(VENV)/bin/python -c "import zipfile; z=zipfile.ZipFile([f for f in __import__('os').listdir('dist') if f.endswith('.whl')][0].replace('', 'dist/')); print('\n'.join(z.namelist()))" \
-		2>/dev/null | head -30 || unzip -l dist/*.whl | head -30
+	@unzip -l dist/*.whl | head -40
 
 .PHONY: verify-wheel
 verify-wheel:
 	@rm -rf /tmp/gp-verify
 	@python3 -m venv /tmp/gp-verify
-	/tmp/gp-verify/bin/pip install --quiet 'dist/*.whl[server,host]'
+	@WHL=$$(ls dist/*.whl | head -1); \
+	 echo "Installing $$WHL[server,host]"; \
+	 /tmp/gp-verify/bin/pip install --quiet "$$WHL[server,host]"
 	/tmp/gp-verify/bin/gpuprof version
 	/tmp/gp-verify/bin/gpuprof selfcheck | tail -12
 	@rm -rf /tmp/gp-verify
