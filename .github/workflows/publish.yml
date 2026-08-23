@@ -7,13 +7,12 @@
 #        Repository:    gpuprof
 #        Workflow name: publish.yml
 #        Environment:   pypi
-#   3. Repeat on https://test.pypi.org for TestPyPI (Environment: testpypi).
 #
 # RELEASE FLOW after setup:
 #   git tag v0.7.1 && git push --tags
-#     → triggers the tag build here, publishes to PyPI.
-#   Manual TestPyPI dry-run:
-#     Actions tab → "Publish" → Run workflow → target=testpypi
+#     → triggers this workflow, publishes to PyPI.
+#   Actions tab → "Publish" → Run workflow — same effect, useful if
+#   you want to re-publish an already-tagged commit.
 #
 # The published wheel/sdist come from the exact commit the tag
 # points at — no local `~/.pypirc` needed and no long-lived tokens.
@@ -23,14 +22,7 @@ name: Publish
 on:
   push:
     tags: ['v*.*.*']
-  workflow_dispatch:
-    inputs:
-      target:
-        description: 'PyPI target'
-        required: true
-        default: testpypi
-        type: choice
-        options: [testpypi, pypi]
+  workflow_dispatch: {}
 
 jobs:
   build:
@@ -52,35 +44,15 @@ jobs:
           name: dist
           path: dist/
 
-  publish-testpypi:
-    name: Publish → TestPyPI
-    needs: build
-    if: github.event_name == 'workflow_dispatch' && inputs.target == 'testpypi'
-    runs-on: ubuntu-latest
-    environment:
-      name: testpypi
-      url: https://test.pypi.org/project/gpuprof/
-    permissions:
-      id-token: write        # OIDC token for Trusted Publishing
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: dist
-          path: dist/
-      - uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          repository-url: https://test.pypi.org/legacy/
-
   publish-pypi:
     name: Publish → PyPI
     needs: build
-    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.target == 'pypi')
     runs-on: ubuntu-latest
     environment:
       name: pypi
       url: https://pypi.org/project/gpuprof/
     permissions:
-      id-token: write
+      id-token: write        # OIDC token for Trusted Publishing
     steps:
       - uses: actions/download-artifact@v4
         with:
